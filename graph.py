@@ -2,6 +2,15 @@ from langgraph.graph import StateGraph, START, END
 from state import AgentState
 from nodes import *
 
+def should_retry(state: AgentState) -> str:
+    """裁判函数，决定流向"""
+    error = state.get('error')
+    retry_count = state.get('retry_count', 0)
+    if error and retry_count<3:
+        print(f'正在进行第{retry_count}次重试')
+        return 'retry'
+    return 'continue'
+
 def build_graph():
     graph = StateGraph(AgentState)
 
@@ -13,6 +22,6 @@ def build_graph():
     graph.add_edge(START, 'schema')
     graph.add_edge('schema', 'generate_sql')
     graph.add_edge('generate_sql', 'run_sql')
-    graph.add_edge('run_sql', 'explain')
+    graph.add_conditional_edges('run_sql', should_retry, {'retry': 'generate_sql','continue': 'explain'})
     graph.add_edge('explain', END)
     return graph.compile()

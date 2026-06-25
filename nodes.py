@@ -33,12 +33,20 @@ def generate_sql_node(state: AgentState) -> dict:
     """根据question+schema，让LLM生成SQL语句"""
     question = state['question']
     schema = state['schema']
+    error = state.get('error', False)
+    error_msg = state.get('result', '')
+    error_sql = state.get('sql', '')
+
+    error_context = ""
+    if error:
+        error_context = f"""你的sql语句报错了，你生成的错误sql是{error_sql},MySQL的报错信息是{error_msg}。
+请仔细阅读报错信息，修正错误，重新生成正确的SQL语句。"""
 
     parser = PydanticOutputParser(pydantic_object=SQLoutput)
 
     system_prompt = """
       你是一位资深的MySQL专家，你的唯一任务是：根据用户提供的自然语言问题，结合下方的【数据库表结构】，编写出准确、高效且安全的 SQL 查询语句。
-      【数据库表结构】：{schema},【输出格式要求】：{format_instructions}
+      【数据库表结构】：{schema},【输出格式要求】：{format_instructions}，{error_context}
       在正式生成SQL前，你必须在‘thought_process’中先分析用户的问题：
       1.核心需求是什么？
       2.要用到哪几张表，哪些字段？
@@ -55,7 +63,8 @@ def generate_sql_node(state: AgentState) -> dict:
     response = chain.invoke({
         'schema': schema,
         'question': question,
-        'format_instructions': parser.get_format_instructions()
+        'format_instructions': parser.get_format_instructions(),
+        'error_context': error_context
     })
 
     return {'sql': response.sql_query}
@@ -63,13 +72,14 @@ def generate_sql_node(state: AgentState) -> dict:
 def run_sql_node(state: AgentState) -> dict:
     """执行state中的SQL，并将结果或报错信息存入state。"""
     sql = state['sql']
+    current_retry = state.get('retry_count', 0)
     conn = get_db()
     try:
         result = run_sql(conn, sql)
         if isinstance(result, str) and result.startswith("SQL执行出错"):
-            return {'result': result, 'error': True}
+            return {'result': result, 'error': True, 'retry_count': current_retry + 1}
         else:
-            return {'result': str(result),'error': False}
+            return {'result': str(result),'error': False, 'retry_count': current_retry}
 
     finally:
         conn.close()
