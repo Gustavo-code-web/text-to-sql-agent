@@ -5,6 +5,12 @@ from db import get_schema, run_sql, get_db
 from pydantic import BaseModel, Field
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+import pandas as pd
+import re
+import matplotlib.pyplot as plt
+import time
+import datetime
+from decimal import Decimal
 
 class SQLoutput(BaseModel):
     thought_process: str = Field(description='一步步地思考过程，分析可能用到哪些表和字段')
@@ -112,6 +118,72 @@ def explain_node(state: AgentState) -> dict:
         'sql': state['sql']
     })
     return {'answer': answer}
+
+def generate_and_run_chart_node(state: AgentState) -> dict:
+    """如果需要画图，让LLM生成代码并执行"""
+    question = state['question']
+    result_data = state['result']
+
+    if not any(keyword in question for keyword in ['趋势','占比','分布','图','对比']):
+        return {'need_chart': False}
+
+    system_prompt = """
+        你是一个精通 Python (Pandas 和 Matplotlib) 的数据分析专家。
+        用户的原始问题是：{question}
+        数据库查询结果（List of Dict格式）如下：
+        {result_data}
+
+        请编写一段 Python 代码来对上述数据进行可视化。
+        【要求】：
+        1. 你可以直接使用全局变量 `data`，它包含了上述的数据字典列表。
+        2. 将 `data` 转换为 pandas DataFrame 进行处理。
+        3. 使用 matplotlib 生成图表。
+        4. 图表必须保存到指定的路径，路径保存在全局变量 `save_path` 中。使用 plt.savefig(save_path) 保存。
+        5. 不要使用 plt.show()。
+        6. 代码需要处理好中文字体显示的问题（如设置 plt.rcParams['font.sans-serif'] = ['SimHei']）。
+        7. 只输出纯 Python 代码，不要包含任何 markdown 代码块标记 (```python) 或其他解释性文字。
+        """
+
+    prompt = ChatPromptTemplate.from_messages([('system', system_prompt)])
+    chain = prompt | llm | StrOutputParser()
+
+    if isinstance(result_data, str):
+        try:
+            real_list = eval(result_data, {"datetime": datetime, "Decimal": Decimal})
+            sample_data = str(real_list[:5])
+        except Exception:
+            sample_data = result_data[:500]
+    else:
+        sample_data = str(result_data[:5])
+
+    code_str = chain.invoke({
+        'question': question,
+        'result_data': sample_data
+    })
+    code_str = re.sub(r"^```python\n|```$", "", code_str.strip(), flags=re.MULTILINE)
+    timestamp = int(time.time())
+    chart_path = f"D:\\JupyterProject2\\output\\chart_{timestamp}.png"
+
+    exec_globals = {
+        "data": eval(result_data, {"datetime": datetime, 'Decimal': Decimal}) if isinstance(result_data, str) else result_data,
+        "save_path": chart_path,
+        "pd": pd,
+        "plt": plt,
+        "datetime": datetime,
+        'Decimal': Decimal
+    }
+
+    try:
+        plt.rcParams['font.sans-serif'] = ['SimHei']
+        plt.rcParams['axes.unicode_minus'] = False
+        exec(code_str, exec_globals)
+        return {'need_chart': True,
+                'chart_node': code_str,
+                'chart_path': chart_path}
+    except Exception as e:
+        print(f'画图代码执行失败：{e}')
+        return {'need_chart': False,'chart_node': code_str}
+
 
 
 

@@ -7,3 +7,6 @@ class AgentState(TypedDict):
     answer: str        # 最终答案
     error: bool        # 是否报错
     retry_count: int   # 重试次数
+    need_chart: bool   # 用户是否需要画图
+    chart_code: str    # LLM生成的画图代码
+    chart_path: str    # 图片保存的路径
