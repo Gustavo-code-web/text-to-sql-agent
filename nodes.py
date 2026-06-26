@@ -12,7 +12,7 @@ import time
 import datetime
 from decimal import Decimal
 
-class SQLoutput(BaseModel):
+class SQLOutput(BaseModel):
     thought_process: str = Field(description='一步步地思考过程，分析可能用到哪些表和字段')
     sql_query: str = Field(description='最终生成的可执行的MySQL语句，仅返回SQL语句，不要有别的markdown标记')
 
@@ -48,7 +48,7 @@ def generate_sql_node(state: AgentState) -> dict:
         error_context = f"""你的sql语句报错了，你生成的错误sql是{error_sql},MySQL的报错信息是{error_msg}。
 请仔细阅读报错信息，修正错误，重新生成正确的SQL语句。"""
 
-    parser = PydanticOutputParser(pydantic_object=SQLoutput)
+    parser = PydanticOutputParser(pydantic_object=SQLOutput)
 
     system_prompt = """
       你是一位资深的MySQL专家，你的唯一任务是：根据用户提供的自然语言问题，结合下方的【数据库表结构】，编写出准确、高效且安全的 SQL 查询语句。
