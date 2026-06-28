@@ -109,7 +109,7 @@ python main.py
 
 **Agent 自动完成：** 检索相关表 → 生成多表关联 SQL → 执行 → 生成柱状图（含基准线）→ 文字解读。
 
-![img.png](img.png)
+![运行效果](docs/demo.png)
 
 ---
 
