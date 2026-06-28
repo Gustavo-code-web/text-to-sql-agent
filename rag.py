@@ -1,4 +1,3 @@
-import os
 from db import get_db, get_schema_per_table
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
