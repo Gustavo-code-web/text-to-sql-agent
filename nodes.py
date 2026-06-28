@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import time
 import datetime
 from decimal import Decimal
+from rag import retrieve_relevant_schema
 
 class SQLOutput(BaseModel):
     thought_process: str = Field(description='一步步地思考过程，分析可能用到哪些表和字段')
@@ -26,12 +27,10 @@ llm = ChatOpenAI(
 )
 
 def schema_node(state: AgentState) -> dict:
-    """获取数据库结构，写入state"""
-    conn = get_db()
-    try:
-        schema_text = get_schema(conn)
-    finally:
-        conn.close()
+    """[Rag版]不在获取全部表，而是检索出与问题最相关的几张表结构"""
+    question = state['question']
+
+    schema_text = retrieve_relevant_schema(question, k = 5)
 
     return {'schema': schema_text}
 
