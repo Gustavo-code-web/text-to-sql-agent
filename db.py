@@ -9,9 +9,9 @@ def get_db():
     conn = pymysql.connect(
         host = os.getenv('DB_HOST', 'localhost'),
         port = int(os.getenv('DB_PORT', '3306')),
-        user = os.getenv('DB_USER', 'root'),
-        password = os.getenv('DB_PASSWORD', 'topking1226@'),
-        database = os.getenv('DB_NAME', 'mianshi'),
+        user = os.getenv('DB_USER', ''),
+        password = os.getenv('DB_PASSWORD', ''),
+        database = os.getenv('DB_NAME', ''),
         charset = 'utf8',
         cursorclass = pymysql.cursors.DictCursor
     )
