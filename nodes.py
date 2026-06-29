@@ -12,6 +12,7 @@ import time
 import datetime
 from decimal import Decimal
 from rag import retrieve_relevant_schema
+from langchain_core.messages import HumanMessage, AIMessage
 
 class SQLOutput(BaseModel):
     thought_process: str = Field(description='一步步地思考过程，分析可能用到哪些表和字段')
@@ -38,6 +39,7 @@ def generate_sql_node(state: AgentState) -> dict:
     """根据question+schema，让LLM生成SQL语句"""
     question = state['question']
     schema = state['schema']
+    history = state.get('messages', [])
     error = state.get('error', False)
     error_msg = state.get('result', '')
     error_sql = state.get('sql', '')
@@ -47,17 +49,28 @@ def generate_sql_node(state: AgentState) -> dict:
         error_context = f"""你的sql语句报错了，你生成的错误sql是{error_sql},MySQL的报错信息是{error_msg}。
 请仔细阅读报错信息，修正错误，重新生成正确的SQL语句。"""
 
+    history_text = ""
+    if history:
+        history_text = '[历史对话记录] \n'
+        for msg in history:
+            role = '用户' if isinstance(msg, HumanMessage) else '助手'
+            history_text += f'{role}: {msg.content}\n'
+
     parser = PydanticOutputParser(pydantic_object=SQLOutput)
 
     system_prompt = """
-      你是一位资深的MySQL专家，你的唯一任务是：根据用户提供的自然语言问题，结合下方的【数据库表结构】，编写出准确、高效且安全的 SQL 查询语句。
-      【数据库表结构】：{schema},【输出格式要求】：{format_instructions}，{error_context}
-      在正式生成SQL前，你必须在‘thought_process’中先分析用户的问题：
-      1.核心需求是什么？
-      2.要用到哪几张表，哪些字段？
-      3.多表关联的join条件？
-      4.是否需要用到过滤条件（where），模糊查询（like），分组聚合（group by），条件判断（if/case when），窗口函数，排序规则等。
-    """
+          你是一位资深的MySQL专家，你的唯一任务是：根据用户提供的自然语言问题，结合下方的【数据库表结构】和【历史对话】，编写出准确、高效且安全的 SQL 查询语句。
+          【数据库表结构】：{schema}
+          {history_text}
+          【输出格式要求】：{format_instructions}
+          {error_context}
+
+          在正式生成SQL前，你必须在‘thought_process’中先分析用户的问题：
+          1.核心需求是什么？是否需要参考【历史对话记录】补充缺失的条件（如年份、学科等）？
+          2.要用到哪几张表，哪些字段？
+          3.多表关联的join条件？
+          4.是否需要用到过滤条件（where），模糊查询（like），分组聚合（group by），条件判断（if/case when），窗口函数，排序规则等。
+        """
 
     prompt = ChatPromptTemplate.from_messages([
         ('system', system_prompt),
@@ -69,7 +82,8 @@ def generate_sql_node(state: AgentState) -> dict:
         'schema': schema,
         'question': question,
         'format_instructions': parser.get_format_instructions(),
-        'error_context': error_context
+        'error_context': error_context,
+        'history_text': history_text
     })
 
     return {'sql': response.sql_query}
@@ -116,7 +130,7 @@ def explain_node(state: AgentState) -> dict:
         'result': result,
         'sql': state['sql']
     })
-    return {'answer': answer}
+    return {'answer': answer, 'messages': [HumanMessage(content=question), AIMessage(content=answer)]}
 
 def generate_and_run_chart_node(state: AgentState) -> dict:
     """如果需要画图，让LLM生成代码并执行"""

@@ -11,7 +11,7 @@ def should_retry(state: AgentState) -> str:
         return 'retry'
     return 'continue'
 
-def build_graph():
+def build_graph(checkpointer=None):
     graph = StateGraph(AgentState)
 
     graph.add_node('schema', schema_node)
@@ -26,4 +26,4 @@ def build_graph():
     graph.add_conditional_edges('run_sql', should_retry, {'retry': 'generate_sql','continue': 'chart'})
     graph.add_edge('chart', 'explain')
     graph.add_edge('explain', END)
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)

@@ -7,3 +7,4 @@ venv/
 .idea/
 output/
 chroma_schema_db/
+.chroma_langchain_db/

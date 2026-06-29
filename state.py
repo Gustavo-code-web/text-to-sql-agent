@@ -1,4 +1,6 @@
-from typing import TypedDict
+from typing import TypedDict, Annotated
+from langchain_core.messages import BaseMessage
+from langgraph.graph import add_messages
 class AgentState(TypedDict):
     question: str      # 用户的问题
     schema: str        # 表结构（每列的列名）
@@ -10,3 +12,4 @@ class AgentState(TypedDict):
     need_chart: bool   # 用户是否需要画图
     chart_code: str    # LLM生成的画图代码
     chart_path: str    # 图片保存的路径
+    messages: Annotated[list[BaseMessage], add_messages]
