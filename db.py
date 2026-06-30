@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 import pymysql
+import re
 
 load_dotenv()
 
@@ -39,9 +40,26 @@ def get_schema(conn) -> str:
 
     return '\n'.join(schema_lines)
 
+def is_safe_sql(sql: str) -> bool:
+    """检查SQL是否安全（只读查询）。安全返回True，危险返回False。"""
+    sql_clean = sql.strip().lower()
+    if not (sql_clean.startswith('select') or sql_clean.startswith('with')):
+        return False
+
+    danger_words = ['drop', 'delete', 'update', 'create', 'alter', 'insert', 'truncate', 'grant']
+
+    for word in danger_words:
+        if re.search(rf'\b{word}\b', sql_clean):
+            return False
+    if ';' in sql_clean.rstrip(';'):
+        return False
+    return True
 
 def run_sql(conn, sql: str) -> str:
     """执行SQL语句，返回查询结果"""
+    if not is_safe_sql(sql):
+        return "SQL执行出错 检测到非查询类操作，出于安全考虑已拒绝执行。"
+
     try:
         with conn.cursor() as cursor:
             cursor.execute(sql)
