@@ -5,6 +5,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 PERSIST_DIR = "D:\\JupyterProject2\\chroma_schema_db"
 COLLECTION_NAME = "table_schemas"
+EXAMPLES_PERSIST_DIR = "D:\\JupyterProject2\\chroma_examples_db"
+EXAMPLES_COLLECTION = "sql_examples"
 
 embeddings = HuggingFaceEmbeddings(model_name = "BAAI/bge-small-zh-v1.5")
 
@@ -53,3 +55,45 @@ def retrieve_relevant_schema(question: str, k: int = 5) -> str:
     schema_text = "\n".join([doc.page_content for doc in docs])
 
     return schema_text
+
+def train_sql(question: str, sql: str):
+    """把一对【问题->正确SQL】存进向量数据库，让agent越用越聪明"""
+    doc = Document(
+        page_content=question,
+        metadata={
+            'sql': sql,
+            'question': question
+        }
+    )
+    vectorstore = Chroma(
+        collection_name=EXAMPLES_COLLECTION,
+        embedding_function=embeddings,
+        persist_directory=EXAMPLES_PERSIST_DIR
+    )
+    vectorstore.add_documents([doc])
+
+def retrieve_similar_examples(question: str, k: int = 3):
+    """检索与当前问题最相似的历史【问题->SQL】示例，拼成few-shot文本"""
+    vectorstore = Chroma(
+        collection_name=EXAMPLES_COLLECTION,
+        embedding_function=embeddings,
+        persist_directory=EXAMPLES_PERSIST_DIR
+    )
+    try:
+        docs = vectorstore.similarity_search(question, k=k)
+    except Exception as e:
+        print(f'示例库暂时为空：{e}')
+        return ''
+
+    if not docs:
+        return ''
+
+    example_text = "【参考历史示例（Few-Shot）】\n"
+    for i, doc in enumerate(docs, 1):
+        ex_question = doc.metadata.get('question', '未知问题')
+        ex_sql = doc.metadata.get('sql', '未知SQL')
+        example_text += f'--- 示例{i} ---'
+        example_text += f'示例问题：{ex_question}\n'
+        example_text += f'对应SQL：{ex_sql}\n\n'
+
+    return example_text.strip()

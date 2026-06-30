@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import time
 import datetime
 from decimal import Decimal
-from rag import retrieve_relevant_schema
+from rag import retrieve_relevant_schema, retrieve_similar_examples
 from langchain_core.messages import HumanMessage, AIMessage
 
 class SQLOutput(BaseModel):
@@ -56,20 +56,30 @@ def generate_sql_node(state: AgentState) -> dict:
             role = '用户' if isinstance(msg, HumanMessage) else '助手'
             history_text += f'{role}: {msg.content}\n'
 
+    examples = retrieve_similar_examples(question, k=3)
+
     parser = PydanticOutputParser(pydantic_object=SQLOutput)
 
     system_prompt = """
-          你是一位资深的MySQL专家，你的唯一任务是：根据用户提供的自然语言问题，结合下方的【数据库表结构】和【历史对话】，编写出准确、高效且安全的 SQL 查询语句。
-          【数据库表结构】：{schema}
-          {history_text}
-          【输出格式要求】：{format_instructions}
-          {error_context}
+      你是一位资深的MySQL专家，你的唯一任务是：根据用户提供的自然语言问题，结合下方的【数据库表结构】、【历史对话】和【参考示例】，编写出准确、高效且安全的 SQL 查询语句。
+      
+      【数据库表结构】：
+      {schema}
+      
+      {history_text}
+      
+      【参考以下历史成功示例(如果有)】：
+      {examples}
+      (提示：请重点参考上述示例中验证过的正确语法、表关联方式或特定业务逻辑)
 
-          在正式生成SQL前，你必须在‘thought_process’中先分析用户的问题：
-          1.核心需求是什么？是否需要参考【历史对话记录】补充缺失的条件（如年份、学科等）？
-          2.要用到哪几张表，哪些字段？
-          3.多表关联的join条件？
-          4.是否需要用到过滤条件（where），模糊查询（like），分组聚合（group by），条件判断（if/case when），窗口函数，排序规则等。
+      【输出格式要求】：{format_instructions}
+      {error_context}
+      
+      在正式生成SQL前，你必须在‘thought_process’中先分析用户的问题：
+      1.核心需求是什么？是否需要参考【历史对话记录】补充缺失的条件？
+      2.要用到哪几张表，哪些字段？是否可以参考【历史成功示例】中的写法？
+      3.多表关联的join条件？
+      4.是否需要用到过滤条件（where），分组聚合（group by）等。
         """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -83,7 +93,8 @@ def generate_sql_node(state: AgentState) -> dict:
         'question': question,
         'format_instructions': parser.get_format_instructions(),
         'error_context': error_context,
-        'history_text': history_text
+        'history_text': history_text,
+        'examples': examples
     })
 
     return {'sql': response.sql_query}
